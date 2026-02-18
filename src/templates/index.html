@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOC Knowledge Base</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, monospace;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            padding: 2rem 1rem;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+        }
+        h1 {
+            color: #00d4ff;
+            font-size: 1.6rem;
+            margin-bottom: 0.3rem;
+        }
+        .subtitle {
+            color: #888;
+            font-size: 0.85rem;
+            margin-bottom: 1.5rem;
+        }
+        .search-box {
+            display: flex;
+            gap: 0.5rem;
+            margin-bottom: 1.5rem;
+        }
+        input[type="text"] {
+            flex: 1;
+            padding: 0.7rem 1rem;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 0.95rem;
+            outline: none;
+        }
+        input[type="text"]:focus {
+            border-color: #00d4ff;
+        }
+        button {
+            padding: 0.7rem 1.5rem;
+            background: #0f3460;
+            color: #00d4ff;
+            border: 1px solid #00d4ff;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            cursor: pointer;
+        }
+        button:hover { background: #1a4a7a; }
+        button:disabled { opacity: 0.5; cursor: not-allowed; }
+        .loading {
+            display: none;
+            color: #ffaa00;
+            font-size: 0.9rem;
+            margin-bottom: 1rem;
+        }
+        .loading.visible { display: block; }
+        .answer-section {
+            display: none;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 1.2rem;
+            margin-bottom: 1rem;
+        }
+        .answer-section.visible { display: block; }
+        .answer-label {
+            color: #00d4ff;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+        .answer-text {
+            line-height: 1.6;
+            white-space: pre-wrap;
+        }
+        .sources-section {
+            display: none;
+            background: #16213e;
+            border: 1px solid #0f3460;
+            border-radius: 8px;
+            padding: 1rem 1.2rem;
+        }
+        .sources-section.visible { display: block; }
+        .sources-label {
+            color: #00d4ff;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.4rem;
+        }
+        .sources-list {
+            list-style: none;
+            padding: 0;
+        }
+        .sources-list li {
+            color: #aaa;
+            font-size: 0.85rem;
+            padding: 0.2rem 0;
+        }
+        .sources-list li::before {
+            content: "› ";
+            color: #00d4ff;
+        }
+        .error {
+            display: none;
+            background: #2e1a1a;
+            border: 1px solid #6e2020;
+            border-radius: 8px;
+            padding: 1rem 1.2rem;
+            color: #ff6b6b;
+            font-size: 0.9rem;
+        }
+        .error.visible { display: block; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SOC Knowledge Base</h1>
+        <p class="subtitle">Ask questions about SOC documentation</p>
+
+        <div class="search-box">
+            <input type="text" id="query" placeholder="e.g. What is our incident response process?" autofocus>
+            <button id="submit" onclick="submitQuery()">Ask</button>
+        </div>
+
+        <div class="loading" id="loading">Generating answer… this may take up to 60 seconds on CPU</div>
+        <div class="error" id="error"></div>
+
+        <div class="answer-section" id="answer-section">
+            <div class="answer-label">Answer</div>
+            <div class="answer-text" id="answer-text"></div>
+        </div>
+
+        <div class="sources-section" id="sources-section">
+            <div class="sources-label">Sources</div>
+            <ul class="sources-list" id="sources-list"></ul>
+        </div>
+    </div>
+
+    <script>
+        const queryInput = document.getElementById("query");
+        const submitBtn = document.getElementById("submit");
+        const loading = document.getElementById("loading");
+        const errorDiv = document.getElementById("error");
+        const answerSection = document.getElementById("answer-section");
+        const answerText = document.getElementById("answer-text");
+        const sourcesSection = document.getElementById("sources-section");
+        const sourcesList = document.getElementById("sources-list");
+
+        queryInput.addEventListener("keydown", function(e) {
+            if (e.key === "Enter") submitQuery();
+        });
+
+        async function submitQuery() {
+            const query = queryInput.value.trim();
+            if (!query) return;
+
+            loading.classList.add("visible");
+            errorDiv.classList.remove("visible");
+            answerSection.classList.remove("visible");
+            sourcesSection.classList.remove("visible");
+            submitBtn.disabled = true;
+
+            try {
+                const res = await fetch("/api/query", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({query: query}),
+                });
+
+                const data = await res.json();
+
+                if (!res.ok) {
+                    errorDiv.textContent = data.error || "Something went wrong.";
+                    errorDiv.classList.add("visible");
+                    return;
+                }
+
+                answerText.textContent = data.answer;
+                answerSection.classList.add("visible");
+
+                sourcesList.innerHTML = "";
+                if (data.sources && data.sources.length > 0) {
+                    data.sources.forEach(function(src) {
+                        const li = document.createElement("li");
+                        li.textContent = src;
+                        sourcesList.appendChild(li);
+                    });
+                    sourcesSection.classList.add("visible");
+                }
+            } catch (err) {
+                errorDiv.textContent = "Could not reach the server. Is it running?";
+                errorDiv.classList.add("visible");
+            } finally {
+                loading.classList.remove("visible");
+                submitBtn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

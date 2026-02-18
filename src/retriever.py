@@ -1,6 +1,6 @@
 import chromadb
 
-from src.config import CHROMA_DIR, COLLECTION_NAME
+from src.config import CHROMA_DIR, COLLECTION_NAME, TOP_K
 from src.embeddings import SentenceTransformerEmbedding
 
 
@@ -19,6 +19,21 @@ def retrieve(query: str, n_results: int = 5) -> list[dict]:
             "Run the ingestion pipeline first: python -m src.ingest"
         )
 
+    results = collection.query(query_texts=[query], n_results=n_results)
+
+    chunks = []
+    for i in range(len(results["ids"][0])):
+        chunks.append({
+            "text": results["documents"][0][i],
+            "source": results["metadatas"][0][i]["source"],
+            "title": results["metadatas"][0][i]["title"],
+            "chunk_index": results["metadatas"][0][i]["chunk_index"],
+        })
+
+    return chunks
+
+
+def retrieve_with_collection(query: str, collection, n_results: int = TOP_K) -> list[dict]:
     results = collection.query(query_texts=[query], n_results=n_results)
 
     chunks = []
