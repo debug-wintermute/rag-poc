@@ -1,0 +1,67 @@
+{
+  // RAG PoC development container
+  "name": "RAG PoC",
+
+  // Base image: Debian Bookworm with Python 3.12
+  "image": "mcr.microsoft.com/devcontainers/python:3.12-bookworm",
+
+  "features": {
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "20"
+    }
+  },
+
+  // Mount SSH keys from host
+  "mounts": [
+    "source=${localEnv:HOME}/.ssh-container,target=/home/vscode/.ssh,type=bind"
+  ],
+
+  // Port forwards: Ollama API, RAG Web UI, Claude Auth
+  "forwardPorts": [8080, 8338, 8501, 11434],
+  "portsAttributes": {
+    "8080": {
+      "label": "Claude Auth",
+      "onAutoForward": "openBrowser"
+    },
+    "8338": {
+      "label": "Claude Auth Callback",
+      "onAutoForward": "silent"
+    },
+    "8501": {
+      "label": "RAG Web UI",
+      "onAutoForward": "notify"
+    },
+    "11434": {
+      "label": "Ollama API",
+      "onAutoForward": "silent"
+    }
+  },
+
+  "postCreateCommand": "bash .devcontainer/post-create.sh",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-python.python",
+        "ms-azuretools.vscode-docker",
+        "dbaeumer.vscode-eslint",
+        "eamodio.gitlens"
+      ]
+    }
+  },
+
+  "remoteUser": "vscode",
+
+  "runArgs": [
+    "--cap-drop=ALL",
+    "--security-opt=no-new-privileges",
+    "--memory=16g",
+    "--cpus=4",
+    "--pids-limit=1024",
+    "--network=bridge",
+    "--dns=8.8.8.8",
+    "--dns=8.8.4.4",
+    "--ulimit=nofile=65536:65536",
+    "--ulimit=core=0"
+  ]
+}
