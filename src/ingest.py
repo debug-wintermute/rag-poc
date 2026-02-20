@@ -1,3 +1,12 @@
+"""Ingestion pipeline: loads Markdown files, chunks them, and stores embeddings in ChromaDB.
+
+This is the entry point for populating the vector store. Run it from the repo root:
+    python -m src.ingest
+
+Every run performs a full rebuild — the existing collection is deleted and recreated.
+This avoids stale chunk ID collisions from previous ingestion runs.
+"""
+
 import glob
 import os
 import re
@@ -16,11 +25,21 @@ from src.embeddings import SentenceTransformerEmbedding
 
 
 def extract_title(text: str) -> str:
+    """Pull the first top-level Markdown heading (# Title) from the document.
+
+    Used as metadata when storing chunks so we can display human-readable
+    source titles in query results.
+    """
     match = re.search(r"^#\s+(.+)$", text, re.MULTILINE)
     return match.group(1).strip() if match else "Untitled"
 
 
 def load_documents(data_dir: str) -> list[dict]:
+    """Read all .md files from the data directory into structured dicts.
+
+    Returns a sorted list so ingestion order is deterministic across runs.
+    Each dict contains: filename, title, path, and the full content string.
+    """
     docs = []
     for filepath in sorted(glob.glob(os.path.join(data_dir, "*.md"))):
         with open(filepath, encoding="utf-8") as f:
@@ -45,17 +64,21 @@ def main():
 
     client = chromadb.PersistentClient(path=CHROMA_DIR)
 
-    # Reset collection if it exists
+    # Delete the old collection first so we start fresh. This is a full rebuild —
+    # we don't support incremental updates because chunk IDs are position-based
+    # and would collide if documents changed.
     try:
         client.delete_collection(COLLECTION_NAME)
     except (ValueError, chromadb.errors.NotFoundError):
-        pass
+        pass  # Collection doesn't exist yet, nothing to delete
 
     collection = client.get_or_create_collection(
         name=COLLECTION_NAME,
         embedding_function=embed_fn,
     )
 
+    # Batch all chunks before adding to ChromaDB — a single add() call is
+    # much faster than adding chunks one at a time
     all_ids = []
     all_documents = []
     all_metadatas = []
@@ -63,6 +86,7 @@ def main():
     for doc in docs:
         chunks = chunk_text(doc["content"], CHUNK_SIZE, CHUNK_OVERLAP)
         for i, chunk in enumerate(chunks):
+            # ID format "filename_chunkindex" ensures uniqueness across documents
             all_ids.append(f"{doc['filename']}_{i}")
             all_documents.append(chunk)
             all_metadatas.append({
